@@ -20,7 +20,8 @@ export default function Home() {
   const [cart, setCart] = useState({});
   const [warm, setWarm] = useState(false);
   const [payment, setPayment] = useState("Efectivo");
-  const [matricula, setMatricula] = useState("");
+  const [customerType, setCustomerType] = useState("Estudiante");
+  const [customerIdentifier, setCustomerIdentifier] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -72,7 +73,7 @@ export default function Home() {
 
   async function placeOrder() {
     if (!supabase) return setNotice("Conecta Supabase para generar pedidos reales. El catálogo de demostración está activo.");
-    if (!matricula.trim()) return setNotice("Escribe tu matrícula universitaria.");
+    if (customerType !== "Sin identificación" && !customerIdentifier.trim()) return setNotice(customerType === "Estudiante" ? "Escribe la matrícula del estudiante." : "Escribe el nombre del cliente.");
     if (!cartItems.length) return setNotice("Agrega al menos un producto.");
     setBusy(true); setNotice("");
     const payload = cartItems.map((item) => ({ producto_id: item.id, cantidad: item.cantidad }));
@@ -80,7 +81,8 @@ export default function Home() {
       p_items: payload,
       p_calentar: warm,
       p_metodo_pago: payment,
-      p_matricula: matricula.trim(),
+      p_tipo_cliente: customerType,
+      p_identificacion: customerType === "Sin identificación" ? null : customerIdentifier.trim(),
     });
     setBusy(false);
     if (error) return setNotice(error.message);
@@ -144,13 +146,19 @@ export default function Home() {
           <aside className="order-card">
             <div className="order-title"><div><span className="eyebrow">TU PEDIDO</span><h2>Orden rápida</h2></div><span className="bag">▣</span></div>
             {cartItems.length ? <div className="cart-list">{cartItems.map((item) => <div className="cart-row" key={item.id}><div><b>{item.nombre}</b><small>{money(item.precio)} c/u</small></div><div className="stepper"><button onClick={() => changeQty(item, -1)}>−</button><b>{item.cantidad}</b><button onClick={() => changeQty(item, 1)}>+</button></div></div>)}</div> : <div className="empty-cart"><span>🛍️</span><p>Tu pedido está vacío.</p><small>Agrega algo rico de la vitrina.</small></div>}
-            <label className="field-label" htmlFor="matricula">Matrícula universitaria</label>
-            <input id="matricula" className="text-input" value={matricula} onChange={(e) => setMatricula(e.target.value)} placeholder="Escribe tu matrícula" autoComplete="off" />
+            <label className="field-label" htmlFor="customerType">Tipo de cliente</label>
+            <select id="customerType" value={customerType} onChange={(e) => { setCustomerType(e.target.value); setCustomerIdentifier(""); }}>
+              <option>Estudiante</option><option>Profesor</option><option>Visitante</option><option>Sin identificación</option>
+            </select>
+            {customerType !== "Sin identificación" && <>
+              <label className="field-label" htmlFor="customerIdentifier">{customerType === "Estudiante" ? "Matrícula universitaria" : "Nombre del cliente"}</label>
+              <input id="customerIdentifier" className="text-input" value={customerIdentifier} onChange={(e) => setCustomerIdentifier(e.target.value)} placeholder={customerType === "Estudiante" ? "Escribe tu matrícula" : "Escribe tu nombre"} autoComplete="off" />
+            </>}
             <label className="check-row"><input type="checkbox" checked={warm} onChange={(e) => setWarm(e.target.checked)}/><span>♨️ Calentar en microondas</span></label>
             <label className="field-label" htmlFor="payment">Método de pago</label>
             <select id="payment" value={payment} onChange={(e) => setPayment(e.target.value)}><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select>
             <div className="total-row"><span>Total</span><strong>{money(total)}</strong></div>
-            <button className="primary-btn" disabled={!cartItems.length || !matricula.trim() || busy} onClick={placeOrder}>{busy ? "Generando…" : "Generar mi turno →"}</button>
+            <button className="primary-btn" disabled={!cartItems.length || (customerType !== "Sin identificación" && !customerIdentifier.trim()) || busy} onClick={placeOrder}>{busy ? "Generando…" : "Generar mi turno →"}</button>
             <small className="secure-note">Tu turno aparecerá aquí y se actualizará en vivo.</small>
           </aside>
         </div>
@@ -159,7 +167,7 @@ export default function Home() {
       {view === "ticket" && (
         <section className="ticket-wrap">
           <div className="ticket-card"><div className="success-mark">✓</div><span className="eyebrow">PEDIDO RECIBIDO</span><h2>¡Ya casi está!</h2><p>Tu código de turno es</p><div className="ticket-code">{activeTicket?.codigo || "UCSD-—"}</div>
-            <p><strong>Matrícula:</strong> {activeTicket?.matricula || matricula}</p>
+            <p><strong>{activeTicket?.tipo_cliente || customerType}:</strong> {activeTicket?.identificacion || (customerType === "Sin identificación" ? "Sin identificación" : customerIdentifier)}</p>
             <div className="ticket-state"><span>Estado del pedido</span><b className="state-pill">{activeTicket?.estado || "Pendiente"}</b></div>
             <p className="ticket-hint">Conserva este código y preséntalo al retirar tu pedido.</p><button className="primary-btn" onClick={() => setView("estudiante")}>Volver a la vitrina</button>
           </div>
@@ -174,7 +182,7 @@ export default function Home() {
               {products.map((p) => <div className="inventory-row" key={p.id}><div className="inventory-emoji">{p.emoji || "🍽️"}</div><div className="inventory-name"><b>{p.nombre}</b><small>{p.disponible ? "Disponible" : "Agotado"}</small></div><strong>{p.stock_actual}</strong><div className="inventory-actions"><button onClick={() => updateStock(p, "menos")} disabled={p.stock_actual < 1}>−</button><button onClick={() => updateStock(p, "mas")}>+</button><button className="exhaust" onClick={() => updateStock(p, "agotado")}>Agotar</button></div></div>)}
             </div>
             <div className="panel"><div className="panel-head"><h3>Turnos activos</h3><span>{tickets.filter((t) => t.estado !== "Entregado").length} pendientes</span></div>
-              {tickets.filter((t) => t.estado !== "Entregado").length ? tickets.filter((t) => t.estado !== "Entregado").map((t) => <article className="dispatch-ticket" key={t.id}><div className="dispatch-top"><b>{t.codigo}</b><span className="state-pill">{t.estado}</span></div><div className="dispatch-meta"><span>Matrícula del estudiante</span><b>{t.matricula || "No registrada"}</b></div><div className="dispatch-items">{(t.ticket_items || []).map((i) => <span key={i.id}>{i.cantidad}× {i.nombre_producto}</span>)}</div><div className="dispatch-meta"><span>{t.metodo_pago}</span><b>{money(t.total)}</b></div><div className="dispatch-actions">{t.estado === "Pendiente" && <button className="primary-btn compact" onClick={() => updateTicket(t, "Cobrado / Listo")}>Cobrado / Listo</button>}<button className="outline-btn compact" onClick={() => updateTicket(t, "Entregado")}>Entregado</button></div></article>) : <div className="empty-cart"><span>✓</span><p>No hay turnos activos.</p><small>Los nuevos pedidos aparecerán aquí.</small></div>}
+              {tickets.filter((t) => t.estado !== "Entregado").length ? tickets.filter((t) => t.estado !== "Entregado").map((t) => <article className="dispatch-ticket" key={t.id}><div className="dispatch-top"><b>{t.codigo}</b><span className="state-pill">{t.estado}</span></div><div className="dispatch-meta"><span>{t.tipo_cliente || "Cliente"}</span><b>{t.identificacion || "Sin identificación"}</b></div><div className="dispatch-items">{(t.ticket_items || []).map((i) => <span key={i.id}>{i.cantidad}× {i.nombre_producto}</span>)}</div><div className="dispatch-meta"><span>{t.metodo_pago}</span><b>{money(t.total)}</b></div><div className="dispatch-actions">{t.estado === "Pendiente" && <button className="primary-btn compact" onClick={() => updateTicket(t, "Cobrado / Listo")}>Cobrado / Listo</button>}<button className="outline-btn compact" onClick={() => updateTicket(t, "Entregado")}>Entregado</button></div></article>) : <div className="empty-cart"><span>✓</span><p>No hay turnos activos.</p><small>Los nuevos pedidos aparecerán aquí.</small></div>}
             </div>
           </div>
         </section>
